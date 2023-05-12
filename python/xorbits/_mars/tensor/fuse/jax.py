@@ -1,5 +1,4 @@
 # Copyright 2022-2023 XProbe Inc.
-# derived from copyright 1999-2021 Alibaba Group Holding Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,9 +15,9 @@
 try:
     import jax
 
-    NUMEXPR_INSTALLED = True
+    JAX_INSTALLED = True
 except ImportError:
-    NUMEXPR_INSTALLED = False
+    JAX_INSTALLED = False
 import numpy as np
 
 from ..array_utils import as_same_device
@@ -26,7 +25,7 @@ from ..operands import TensorFuse
 from .core import TensorFuseChunkMixin
 
 
-class TensorNeFuseChunk(TensorFuse, TensorFuseChunkMixin):
+class TensorJAXFuseChunk(TensorFuse, TensorFuseChunkMixin):
     _op_type_ = None  # no opcode, cannot be serialized
 
     @classmethod
