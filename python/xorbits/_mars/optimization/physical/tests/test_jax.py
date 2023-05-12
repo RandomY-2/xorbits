@@ -30,7 +30,7 @@ def test_jax():
           /               \                          \
         @                   @                          @
 
-        fuse stopped at S, because numexpr don't support Slice op
+        fuse stopped at S, because jax don't support Slice op
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(6)
@@ -61,7 +61,7 @@ def test_jax():
           /               \
         @                   @
 
-        fuse stopped at S, because numexpr don't support Slice op
+        fuse stopped at S, because jax don't support Slice op
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(7)
@@ -89,7 +89,7 @@ def test_jax():
           /               \
         @                   @
 
-        fuse stopped at S, because numexpr don't support Slice op
+        fuse stopped at S, because jax don't support Slice op
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(6)
@@ -128,7 +128,7 @@ def test_jax():
           /
         @
 
-        fuse stopped at S, because numexpr don't support Slice op
+        fuse stopped at S, because jax don't support Slice op
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(7)
@@ -163,7 +163,7 @@ def test_jax():
           /
         @
 
-        fuse stopped at S, because numexpr don't support Slice op
+        fuse stopped at S, because jax don't support Slice op
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(8)
@@ -202,7 +202,7 @@ def test_jax():
           /
         S
 
-        fuse stopped at S, because numexpr don't support Slice op
+        fuse stopped at S, because jax don't support Slice op
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(6)
@@ -235,7 +235,7 @@ def test_jax():
 
         @ --> @ --> S --> @  ========>  # --> S --> @
 
-        fuse stopped at S, because numexpr don't support Slice op
+        fuse stopped at S, because jax don't support Slice op
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(4)
@@ -257,7 +257,7 @@ def test_jax():
 
         @ --> @ --> S --> @ --> @   ========>  # --> S --> #
 
-        fuse stopped at S, because numexpr don't support Slice op
+        fuse stopped at S, because jax don't support Slice op
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(4)
@@ -280,7 +280,7 @@ def test_jax():
 
         @ --> @ --> R --> @ --> @   ========>  # --> #
 
-        fuse stopped at R, because reduction should be the last in the numexpr stack.
+        fuse stopped at R, because reduction should be the last in the jax stack.
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(4)
@@ -305,7 +305,7 @@ def test_jax():
 
         R --> @ --> @   ========>  R --> #
 
-        fuse stopped at R, because reduction should be the last in the numexpr stack.
+        fuse stopped at R, because reduction should be the last in the jax stack.
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(2)
@@ -327,7 +327,7 @@ def test_jax():
 
         @ --> @ --> R   ========>  #
 
-        fuse stopped at R, because reduction should be the last in the numexpr stack.
+        fuse stopped at R, because reduction should be the last in the jax stack.
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(2)
@@ -355,7 +355,7 @@ def test_jax():
              /   \  /                               @ --> R
             @     @ --> R
 
-        fuse stopped at R, because reduction should be the last in the numexpr stack.
+        fuse stopped at R, because reduction should be the last in the jax stack.
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(4)
