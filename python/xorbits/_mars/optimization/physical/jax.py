@@ -20,11 +20,21 @@ from typing import List, Set
 import jax.numpy as jnp
 
 from ...core import ChunkGraph, ChunkType
+from ...tensor import reduction
 from ...tensor.fuse import TensorJAXFuseChunk
 from ...tensor.fuse.jax import JAX_INSTALLED
 from .core import RuntimeOptimizer, register_optimizer
 
 logger = logging.getLogger(__name__)
+
+
+REDUCTION = object()
+REDUCTION_OP = {
+    reduction.TensorSum,
+    reduction.TensorProd,
+    reduction.TensorMax,
+    reduction.TensorMin,
+}
 
 
 @dataclasses.dataclass
@@ -37,7 +47,14 @@ class _Fuse:
 def _can_fuse(node: ChunkType):
     op = node.op
     op_type = type(op)
-    return hasattr(jnp, getattr(op_type["_func_name"]))
+    if op_type in REDUCTION_OP:
+        if len(op.axis) == 1 or len(op.axis) == node.ndim:
+            return REDUCTION
+        else:
+            return False
+    return hasattr(op_type, "_func_name") and hasattr(
+        jnp, getattr(op_type, "_func_name")
+    )
 
 
 def _collect_fuse(
@@ -58,7 +75,7 @@ def _collect_fuse(
         is_head = graph.count_predecessors(node) == 0
         for n in graph.iter_predecessors(node):
             can_fuse = cached_can_fuse(n)
-            if can_fuse is False:
+            if can_fuse is False or can_fuse is REDUCTION:
                 is_head = True
             elif not fuse_graph.contains(n):
                 stack.append(n)
@@ -74,6 +91,16 @@ def _collect_fuse(
             can_fuse = cached_can_fuse(n)
             if can_fuse is False:
                 is_tail = True
+            elif can_fuse is REDUCTION:
+                if tail_reduction_node is None:
+                    tail_reduction_node = n
+                    fuse_tails.append(n)
+                    stack.append(n)
+                    fuse_graph.add_node(n)
+                elif n is tail_reduction_node:
+                    fuse_graph.add_edge(node, n)
+                else:
+                    is_tail = True
             elif not fuse_graph.contains(n):
                 stack.append(n)
                 fuse_graph.add_node(n)
