@@ -1,42 +1,168 @@
-# # Copyright 2022-2023 XProbe Inc.
-# #
-# # Licensed under the Apache License, Version 2.0 (the "License");
-# # you may not use this file except in compliance with the License.
-# # You may obtain a copy of the License at
-# #
-# #      http://www.apache.org/licenses/LICENSE-2.0
-# #
-# # Unless required by applicable law or agreed to in writing, software
-# # distributed under the License is distributed on an "AS IS" BASIS,
-# # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# # See the License for the specific language governing permissions and
-# # limitations under the License.
+# Copyright 2022-2023 XProbe Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-# import dataclasses
-# import functools
-# import logging
-# from typing import List, Set
+import dataclasses
+import functools
+import logging
+from typing import List, Set
 
-# import jax.numpy as jnp
-# import numpy as np
+import jax.numpy as jnp
 
-# from ...core import ChunkGraph, ChunkType
-# from ...tensor import arithmetic, reduction
-# from ...tensor.fuse import TensorJAXFuseChunk
-# from ...tensor.fuse.jax import JAX_INSTALLED
-# from .core import RuntimeOptimizer, register_optimizer
+from ...core import ChunkGraph, ChunkType
+from ...tensor.fuse import TensorJAXFuseChunk
+from ...tensor.fuse.jax import JAX_INSTALLED
+from .core import RuntimeOptimizer, register_optimizer
 
-# logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
-# @dataclasses.dataclass
-# class _Fuse:
-#     graph: ChunkGraph
-#     heads: List[ChunkType]
-#     tails: List[ChunkType]
+@dataclasses.dataclass
+class _Fuse:
+    graph: ChunkGraph
+    heads: List[ChunkType]
+    tails: List[ChunkType]
 
 
-# def _can_fuse(node: ChunkType):
-#     op = node.op
-#     op_type = type(op)
-#     return hasattr(jnp, op_type["_func_name"])
+def _can_fuse(node: ChunkType):
+    op = node.op
+    op_type = type(op)
+    return hasattr(jnp, getattr(op_type["_func_name"]))
+
+
+def _collect_fuse(
+    graph: ChunkGraph,
+    node: ChunkType,
+    graph_results: Set[ChunkType],
+    cached_can_fuse,
+):
+    fuse_graph = ChunkGraph()
+    fuse_graph.add_node(node)
+    fuse_heads = []
+    fuse_tails = []
+    tail_reduction_node = None
+
+    stack = [node]
+    while len(stack) != 0:
+        node = stack.pop()
+        is_head = graph.count_predecessors(node) == 0
+        for n in graph.iter_predecessors(node):
+            can_fuse = cached_can_fuse(n)
+            if can_fuse is False:
+                is_head = True
+            elif not fuse_graph.contains(n):
+                stack.append(n)
+                fuse_graph.add_node(n)
+            else:
+                fuse_graph.add_edge(n, node)
+        if is_head:
+            fuse_heads.append(node)
+        if node is tail_reduction_node:
+            continue
+        is_tail = graph.count_successors(node) == 0 or node in graph_results
+        for n in graph.iter_successors(node):
+            can_fuse = cached_can_fuse(n)
+            if can_fuse is False:
+                is_tail = True
+            elif not fuse_graph.contains(n):
+                stack.append(n)
+                fuse_graph.add_node(n)
+            else:
+                fuse_graph.add_edge(node, n)
+        if is_tail:
+            fuse_tails.append(node)
+
+    return _Fuse(fuse_graph, fuse_heads, fuse_tails)
+
+
+@register_optimizer
+class JAXRuntimeOptimizer(RuntimeOptimizer):
+    engine = "jax"
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return JAX_INSTALLED
+
+    def optimize(self):
+        fuses = []
+        explored = set()
+        cached_can_fuse = functools.lru_cache(maxsize=None)(_can_fuse)
+
+        graph = self._graph
+        graph_results = set(graph.results)
+
+        for node in graph.topological_iter():
+            if node in explored or node in graph_results:
+                continue
+
+            can_fuse = cached_can_fuse(node)
+            if can_fuse is True:
+                fuse = _collect_fuse(graph, node, graph_results, cached_can_fuse)
+                if len(fuse.graph) > 1:
+                    explored.update(fuse.graph)
+                    if len(fuse.tails) == 1:
+                        fuses.append(fuse)
+                    else:
+                        logger.info(
+                            "Refused fusing for jax because the tail node count > 1."
+                        )
+
+        return self._fuse_nodes(fuses, TensorJAXFuseChunk)
+
+    def _fuse_nodes(self, fuses: List[_Fuse], fuse_cls):
+        graph = self._graph
+        fused_nodes = []
+
+        for fuse in fuses:
+            fuse_graph = fuse.graph
+            tail_nodes = fuse.tails
+            head_nodes = fuse.heads
+            inputs = [
+                inp for n in head_nodes for inp in n.inputs if inp not in fuse_graph
+            ]
+
+            tail_chunk = tail_nodes[0]
+            tail_chunk_op = tail_chunk.op
+            fuse_op = fuse_cls(
+                sparse=tail_chunk_op.sparse,
+                gpu=tail_chunk_op.gpu,
+                _key=tail_chunk_op.key,
+                fuse_graph=fuse_graph,
+                dtype=tail_chunk.dtype,
+            )
+            fused_chunk = fuse_op.new_chunk(
+                inputs,
+                kws=[tail_chunk.params],
+                _key=tail_chunk.key,
+                _chunk=tail_chunk,
+            ).data
+
+            graph.add_node(fused_chunk)
+            for node in graph.iter_successors(tail_chunk):
+                graph.add_edge(fused_chunk, node)
+            for head_chunk in head_nodes:
+                for node in graph.iter_predecessors(head_chunk):
+                    if not fuse_graph.contains(node):
+                        graph.add_edge(node, fused_chunk)
+            for node in fuse_graph:
+                graph.remove_node(node)
+            fused_nodes.append(fused_chunk)
+
+            try:
+                # check tail node if it's in results
+                i = graph.results.index(tail_chunk)
+                graph.results[i] = fused_chunk
+            except ValueError:
+                pass
+
+        return fuses, fused_nodes
