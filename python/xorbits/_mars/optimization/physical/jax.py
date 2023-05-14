@@ -17,10 +17,8 @@ import functools
 import logging
 from typing import List, Set
 
-import jax.numpy as jnp
-
 from ...core import ChunkGraph, ChunkType
-from ...tensor import reduction
+from ...tensor import arithmetic, reduction
 from ...tensor.fuse import TensorJAXFuseChunk
 from ...tensor.fuse.jax import JAX_INSTALLED
 from .core import RuntimeOptimizer, register_optimizer
@@ -34,6 +32,43 @@ REDUCTION_OP = {
     reduction.TensorProd,
     reduction.TensorMax,
     reduction.TensorMin,
+}
+
+SUPPORT_OP = {
+    arithmetic.TensorAdd,
+    arithmetic.TensorSubtract,
+    arithmetic.TensorMultiply,
+    arithmetic.TensorDivide,
+    arithmetic.TensorPower,
+    arithmetic.TensorMod,
+    arithmetic.TensorNegative,
+    arithmetic.TensorAbs,
+    arithmetic.TensorConj,
+    arithmetic.TensorExp,
+    arithmetic.TensorLog,
+    arithmetic.TensorLog10,
+    arithmetic.TensorExpm1,
+    arithmetic.TensorLog1p,
+    arithmetic.TensorSqrt,
+    arithmetic.TensorEqual,
+    arithmetic.TensorSin,
+    arithmetic.TensorCos,
+    arithmetic.TensorTan,
+    arithmetic.TensorArcsin,
+    arithmetic.TensorArccos,
+    arithmetic.TensorArctan,
+    arithmetic.TensorSinh,
+    arithmetic.TensorCosh,
+    arithmetic.TensorTanh,
+    arithmetic.TensorArcsinh,
+    arithmetic.TensorArccosh,
+    arithmetic.TensorArctanh,
+    arithmetic.TensorLshift,
+    arithmetic.TensorRshift,
+    arithmetic.TensorTreeAdd,
+    arithmetic.TensorTreeMultiply,
+    arithmetic.TensorFloor,
+    arithmetic.TensorCeil,
 }
 
 
@@ -52,9 +87,9 @@ def _can_fuse(node: ChunkType):
             return REDUCTION
         else:
             return False
-    return hasattr(op_type, "_func_name") and hasattr(
-        jnp, getattr(op_type, "_func_name")
-    )
+    if op_type not in SUPPORT_OP:
+        return False
+    return True
 
 
 def _collect_fuse(
