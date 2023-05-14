@@ -51,15 +51,13 @@ def _evaluate(chunk):
             _func = _evaluate(node)
             funcs.append(_func)
 
-        print(funcs)
-
         def _fusion(inputs):
             output = funcs[0](*inputs)
             for func in funcs[1:]:
                 output = func(*output)
             return output
 
-        return _fusion
+        return jax.jit(_fusion)
     elif op_type in ARITHMETIC_SUPPORT:
         return _get_jax_function(chunk.op)
     else:
