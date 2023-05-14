@@ -249,6 +249,9 @@ def test_jax():
 
     optimizer = JAXRuntimeOptimizer(graph)
     _, fused_nodes = optimizer.optimize()
+
+    print(fused_nodes[0].composed)
+    print(chunks[:2])
     assert fused_nodes[0].composed == chunks[:2]
     assert len(fused_nodes) == 1
 
@@ -278,9 +281,9 @@ def test_jax():
     r"""
         graph(@: node, R: Reduction Chunk, #: fused_node):
 
-        @ --> @ --> R --> @ --> @   ========>  # --> #
+        @ --> @ --> R --> @ --> @   ========>  # --> R --> #
 
-        fuse stopped at R, because reduction should be the last in the jax stack.
+        jax fuse will not fuse a reduction node
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(4)
@@ -296,16 +299,16 @@ def test_jax():
     optimizer = JAXRuntimeOptimizer(graph)
     _, fused_nodes = optimizer.optimize()
     assert len(fused_nodes) == 2
-    assert fused_nodes[0].composed == chunks[:2] + [chunk_reduction]
+    assert fused_nodes[0].composed == chunks[:2]
     assert fused_nodes[1].composed == chunks[2:4]
-    assert len(graph) == 2
+    assert len(graph) == 3
 
     r"""
         graph(@: node, R: Reduction Chunk, #: fused_node):
 
         R --> @ --> @   ========>  R --> #
 
-        fuse stopped at R, because reduction should be the last in the jax stack.
+        jax fuse will not fuse a reduction node
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(2)
@@ -325,9 +328,9 @@ def test_jax():
     r"""
         graph(@: node, R: Reduction Chunk, #: fused_node):
 
-        @ --> @ --> R   ========>  #
+        @ --> @ --> R   ========>  # --> R
 
-        fuse stopped at R, because reduction should be the last in the jax stack.
+        jax fuse will not fuse a reduction node
         """
     chunks = [
         TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(2)
@@ -341,43 +344,5 @@ def test_jax():
     optimizer = JAXRuntimeOptimizer(graph)
     _, fused_nodes = optimizer.optimize()
     assert len(fused_nodes) == 1
-    assert fused_nodes[0].composed == chunks[:2] + [chunk_reduction]
-    assert len(graph) == 1
-
-    r"""
-        graph(@: node, R: Reduction Chunk, #: fused_node):
-
-        @
-          \                                        R
-            R     R                               /
-          /  \   /         =============>  # --> #     R
-        @      R     R                            \   /
-             /   \  /                               @ --> R
-            @     @ --> R
-
-        fuse stopped at R, because reduction should be the last in the jax stack.
-        """
-    chunks = [
-        TensorTreeAdd(args=[], _key=str(n)).new_chunk(None, None).data for n in range(4)
-    ]
-    chunk_reductions = [
-        TensorSum(axis=(1,), _key=str(n)).new_chunk([None], None).data for n in range(5)
-    ]
-    graph = ChunkGraph([chunk_reductions[2], chunk_reductions[3], chunk_reductions[4]])
-    list(map(graph.add_node, chunks[:4]))
-    list(map(graph.add_node, chunk_reductions[:5]))
-    graph.add_edge(chunks[0], chunk_reductions[0])
-    graph.add_edge(chunks[1], chunk_reductions[0])
-    graph.add_edge(chunks[2], chunk_reductions[1])
-    graph.add_edge(chunk_reductions[0], chunk_reductions[1])
-    graph.add_edge(chunk_reductions[1], chunk_reductions[2])
-    graph.add_edge(chunk_reductions[1], chunks[3])
-    graph.add_edge(chunks[3], chunk_reductions[3])
-    graph.add_edge(chunks[3], chunk_reductions[4])
-
-    optimizer = JAXRuntimeOptimizer(graph)
-    _, fused_nodes = optimizer.optimize()
-    assert len(fused_nodes) == 2
-    assert fused_nodes[0].composed == [chunks[2], chunk_reductions[1]]
-    assert set(fused_nodes[1].composed) == {chunks[0], chunks[1], chunk_reductions[0]}
-    assert len(graph) == 6
+    assert fused_nodes[0].composed == chunks[:2]
+    assert len(graph) == 2

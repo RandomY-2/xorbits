@@ -18,7 +18,6 @@ try:
     JAX_INSTALLED = True
 except ImportError:
     JAX_INSTALLED = False
-import numpy as np
 
 from .. import arithmetic
 from ..array_utils import as_same_device
@@ -35,7 +34,7 @@ class TensorJAXFuseChunk(TensorFuse, TensorFuseChunkMixin):
         inputs = as_same_device([ctx[c.key] for c in op.inputs], device=op.device)
         jit_func = _evaluate(chunk)
         try:
-            res = jit_func(inputs)
+            res = jit_func(*inputs)
         except Exception as e:
             raise RuntimeError(
                 f"Failed to evaluate jax function {repr(jit_func)}."
@@ -52,13 +51,15 @@ def _evaluate(chunk):
             _func = _evaluate(node)
             funcs.append(_func)
 
+        print(funcs)
+
         def _fusion(inputs):
-            output = funcs[0](inputs)
+            output = funcs[0](*inputs)
             for func in funcs[1:]:
-                output = func(output)
+                output = func(*output)
             return output
 
-        return jax.jit(_fusion)
+        return _fusion
     elif op_type in ARITHMETIC_SUPPORT:
         return _get_jax_function(chunk.op)
     else:
@@ -66,56 +67,12 @@ def _evaluate(chunk):
 
 
 def _get_jax_function(operand):
-    from functools import partial
-
-    import jax.numpy as jnp
-
-    func = getattr(jnp, getattr(operand, "_func_name"))
-
-    if len(operand.inputs) == 1 and hasattr(operand, "lhs"):
-        if np.isscalar(operand.lhs):
-            left = operand.lhs
-            return partial(func, left)
-        if np.isscalar(operand.rhs):
-            right = operand.rhs
-            return lambda x: func(x, right)
-    else:
-        return func
+    return getattr(jax.numpy, getattr(operand, "_func_name"))
 
 
 ARITHMETIC_SUPPORT = {
     arithmetic.TensorAdd,
-    arithmetic.TensorSubtract,
-    arithmetic.TensorMultiply,
-    arithmetic.TensorDivide,
-    arithmetic.TensorPower,
-    arithmetic.TensorMod,
-    arithmetic.TensorNegative,
-    arithmetic.TensorAbs,
-    arithmetic.TensorConj,
-    arithmetic.TensorExp,
-    arithmetic.TensorLog,
-    arithmetic.TensorLog10,
-    arithmetic.TensorExpm1,
-    arithmetic.TensorLog1p,
-    arithmetic.TensorSqrt,
-    arithmetic.TensorEqual,
-    arithmetic.TensorSin,
-    arithmetic.TensorCos,
-    arithmetic.TensorTan,
-    arithmetic.TensorArcsin,
-    arithmetic.TensorArccos,
-    arithmetic.TensorArctan,
-    arithmetic.TensorSinh,
-    arithmetic.TensorCosh,
-    arithmetic.TensorTanh,
-    arithmetic.TensorArcsinh,
-    arithmetic.TensorArccosh,
-    arithmetic.TensorArctanh,
-    arithmetic.TensorLshift,
-    arithmetic.TensorRshift,
     arithmetic.TensorTreeAdd,
-    arithmetic.TensorTreeMultiply,
-    arithmetic.TensorFloor,
-    arithmetic.TensorCeil,
+    arithmetic.TensorSubtract,
+    arithmetic.TensorDivide,
 }

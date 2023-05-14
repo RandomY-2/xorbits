@@ -18,7 +18,7 @@ import logging
 from typing import List, Set
 
 from ...core import ChunkGraph, ChunkType
-from ...tensor import arithmetic, reduction
+from ...tensor import arithmetic
 from ...tensor.fuse import TensorJAXFuseChunk
 from ...tensor.fuse.jax import JAX_INSTALLED
 from .core import RuntimeOptimizer, register_optimizer
@@ -26,49 +26,11 @@ from .core import RuntimeOptimizer, register_optimizer
 logger = logging.getLogger(__name__)
 
 
-REDUCTION = object()
-REDUCTION_OP = {
-    reduction.TensorSum,
-    reduction.TensorProd,
-    reduction.TensorMax,
-    reduction.TensorMin,
-}
-
 SUPPORT_OP = {
     arithmetic.TensorAdd,
-    arithmetic.TensorSubtract,
-    arithmetic.TensorMultiply,
-    arithmetic.TensorDivide,
-    arithmetic.TensorPower,
-    arithmetic.TensorMod,
-    arithmetic.TensorNegative,
-    arithmetic.TensorAbs,
-    arithmetic.TensorConj,
-    arithmetic.TensorExp,
-    arithmetic.TensorLog,
-    arithmetic.TensorLog10,
-    arithmetic.TensorExpm1,
-    arithmetic.TensorLog1p,
-    arithmetic.TensorSqrt,
-    arithmetic.TensorEqual,
-    arithmetic.TensorSin,
-    arithmetic.TensorCos,
-    arithmetic.TensorTan,
-    arithmetic.TensorArcsin,
-    arithmetic.TensorArccos,
-    arithmetic.TensorArctan,
-    arithmetic.TensorSinh,
-    arithmetic.TensorCosh,
-    arithmetic.TensorTanh,
-    arithmetic.TensorArcsinh,
-    arithmetic.TensorArccosh,
-    arithmetic.TensorArctanh,
-    arithmetic.TensorLshift,
-    arithmetic.TensorRshift,
     arithmetic.TensorTreeAdd,
-    arithmetic.TensorTreeMultiply,
-    arithmetic.TensorFloor,
-    arithmetic.TensorCeil,
+    arithmetic.TensorSubtract,
+    arithmetic.TensorDivide,
 }
 
 
@@ -82,11 +44,6 @@ class _Fuse:
 def _can_fuse(node: ChunkType):
     op = node.op
     op_type = type(op)
-    if op_type in REDUCTION_OP:
-        if len(op.axis) == 1 or len(op.axis) == node.ndim:
-            return REDUCTION
-        else:
-            return False
     if op_type not in SUPPORT_OP:
         return False
     return True
@@ -110,7 +67,7 @@ def _collect_fuse(
         is_head = graph.count_predecessors(node) == 0
         for n in graph.iter_predecessors(node):
             can_fuse = cached_can_fuse(n)
-            if can_fuse is False or can_fuse is REDUCTION:
+            if can_fuse is False:
                 is_head = True
             elif not fuse_graph.contains(n):
                 stack.append(n)
@@ -126,16 +83,6 @@ def _collect_fuse(
             can_fuse = cached_can_fuse(n)
             if can_fuse is False:
                 is_tail = True
-            elif can_fuse is REDUCTION:
-                if tail_reduction_node is None:
-                    tail_reduction_node = n
-                    fuse_tails.append(n)
-                    stack.append(n)
-                    fuse_graph.add_node(n)
-                elif n is tail_reduction_node:
-                    fuse_graph.add_edge(node, n)
-                else:
-                    is_tail = True
             elif not fuse_graph.contains(n):
                 stack.append(n)
                 fuse_graph.add_node(n)
