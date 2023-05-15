@@ -65,7 +65,8 @@ def _evaluate(chunk):
 
 
 def _get_jax_function(operand):
-    return getattr(jax.numpy, getattr(operand, "_func_name"))
+    func_name = getattr(operand, "_func_name")
+    return getattr(jax.numpy, func_name)
 
 
 ARITHMETIC_SUPPORT = {

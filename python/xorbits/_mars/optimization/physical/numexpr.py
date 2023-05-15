@@ -21,12 +21,11 @@ from ...core import ChunkType
 from ...tensor import arithmetic, reduction
 from ...tensor.fuse import TensorNeFuseChunk
 from ...tensor.fuse.numexpr import NUMEXPR_INSTALLED
-from .core import GraphTraversalOptimizer, register_optimizer
+from .core import REDUCTION, GraphTraversalOptimizer, register_optimizer
 
 logger = logging.getLogger(__name__)
 
 
-REDUCTION = object()
 REDUCTION_OP = {
     reduction.TensorSum,
     reduction.TensorProd,

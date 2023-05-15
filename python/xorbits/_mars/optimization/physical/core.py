@@ -92,6 +92,13 @@ class GraphTraversalOptimizer(RuntimeOptimizer):
     def _can_fuse(self, node: ChunkType) -> Union[bool, object]:
         """
         Check if a node can be fused
+
+        Returns
+        -------
+        bool or object:
+            If the node can be fused and is a reduction operation, return
+            REDUCTION. Otherwise, if the node can be fused and is not a
+            reduction operation, return True. For other nodes, return False
         """
 
     def _collect_fuse(
@@ -155,6 +162,7 @@ class GraphTraversalOptimizer(RuntimeOptimizer):
         fuses = []
         explored = set()
         cached_can_fuse = functools.lru_cache(maxsize=None)(self._can_fuse)
+
         graph = self._graph
         graph_results = set(graph.results)
         for node in graph.topological_iter():
