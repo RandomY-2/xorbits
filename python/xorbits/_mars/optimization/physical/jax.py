@@ -50,4 +50,8 @@ class JAXRuntimeOptimizer(GraphTraversalOptimizer):
         fuses = self._graph_traverse(
             logger, "Refused fusing for jax because the tail node count > 1."
         )
+
+        if fuses == ([], []):
+            return [], []
+
         return self._fuse_nodes(fuses, TensorJAXFuseChunk)

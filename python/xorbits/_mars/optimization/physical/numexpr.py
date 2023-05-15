@@ -112,4 +112,8 @@ class NumexprRuntimeOptimizer(GraphTraversalOptimizer):
         fuses = self._graph_traverse(
             logger, "Refused fusing for numexpr because the tail node count > 1."
         )
+
+        if fuses == ([], []):
+            return [], []
+
         return self._fuse_nodes(fuses, TensorNeFuseChunk)
